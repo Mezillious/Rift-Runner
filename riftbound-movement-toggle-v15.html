@@ -1,0 +1,1763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Riftbound</title>
+<link rel="manifest" href="data:application/json,{%22name%22:%22Riftbound%22,%22display%22:%22standalone%22}">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --void:#120f1e;
+    --void-deep:#0a0815;
+    --panel:#1c1830;
+    --panel-edge:#2e2850;
+    --rift:#3ee6c4;
+    --rift-dim:#1f7a68;
+    --ink:#e9e4f5;
+    --ink-dim:#9089b3;
+    --common:#8b95a8;
+    --uncommon:#4fbf6b;
+    --rare:#4f9bef;
+    --epic:#b063e8;
+    --legendary:#f0a53c;
+    --danger:#e8556b;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; height:100%; background:var(--void-deep); color:var(--ink);
+    font-family:'Georgia', 'Iowan Old Style', serif;
+    overscroll-behavior:none; user-select:none; -webkit-user-select:none;
+  }
+  #app{
+    max-width:480px; margin:0 auto; height:100dvh; display:flex; flex-direction:column;
+    background:
+      radial-gradient(ellipse at 30% 0%, #241f42 0%, transparent 55%),
+      radial-gradient(ellipse at 80% 100%, #1a2f3a 0%, transparent 50%),
+      var(--void-deep);
+    position:relative; overflow:hidden;
+  }
+  .ui-font{ font-family:-apple-system, 'Helvetica Neue', sans-serif; }
+  header.top{
+    padding:16px 20px 12px; display:flex; justify-content:space-between; align-items:baseline;
+    border-bottom:1px solid var(--panel-edge);
+  }
+  header.top h1{
+    font-size:22px; margin:0; letter-spacing:0.5px; font-weight:400;
+    color:var(--rift); text-shadow:0 0 18px rgba(62,230,196,0.35);
+  }
+  header.top .mana{ font-size:13px; color:var(--ink-dim); font-family:-apple-system,sans-serif; }
+  .screen{ flex:1; overflow-y:auto; padding:18px 20px 90px; }
+  .hide{ display:none !important; }
+
+  /* --- Home --- */
+  .hero{
+    margin-top:12px; text-align:center;
+  }
+  .hero .glyph{ font-size:64px; line-height:1; filter:drop-shadow(0 0 24px rgba(62,230,196,0.4)); }
+  .hero h2{ font-weight:400; font-size:26px; margin:14px 0 6px; }
+  .hero p{ color:var(--ink-dim); font-size:15px; line-height:1.5; max-width:320px; margin:0 auto; }
+  .btn{
+    display:block; width:100%; padding:15px; margin-top:14px; border:none; border-radius:14px;
+    background:var(--rift); color:#08211c; font-size:16px; font-weight:600;
+    font-family:-apple-system,sans-serif; letter-spacing:0.2px;
+  }
+  .btn:active{ transform:scale(0.98); }
+  .btn.secondary{ background:transparent; border:1px solid var(--panel-edge); color:var(--ink); }
+  .btn.danger{ background:var(--danger); color:#2b0a0e; }
+  .btn:disabled{ opacity:0.5; }
+  .status-line{ font-size:13px; color:var(--ink-dim); text-align:center; margin-top:10px; font-family:-apple-system,sans-serif; }
+
+  /* --- Map --- */
+  #leafletMap{
+    width:100%; height:280px; border-radius:16px; border:1px solid var(--panel-edge);
+    margin:10px 0 6px; overflow:hidden; background:#1a1730;
+  }
+  #leafletMap .leaflet-control-attribution{ font-size:9px; }
+  .you-dot{
+    width:14px; height:14px; border-radius:50%; background:var(--rift);
+    box-shadow:0 0 16px 4px rgba(62,230,196,0.6); border:2px solid #08211c;
+  }
+  .spawn-pin{
+    width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:16px; background:var(--panel); border:2px solid var(--panel-edge); cursor:pointer;
+    box-shadow:0 0 10px rgba(0,0,0,0.4); animation:pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(62,230,196,0.25);} 50%{ box-shadow:0 0 0 8px rgba(62,230,196,0);} }
+  .spawn-list{ margin-top:16px; display:flex; flex-direction:column; gap:10px; }
+  .spawn-card{
+    background:var(--panel); border:1px solid var(--panel-edge); border-radius:14px;
+    padding:13px 15px; display:flex; align-items:center; gap:12px; font-family:-apple-system,sans-serif;
+  }
+  .spawn-card .icon{ font-size:26px; }
+  .spawn-card .info{ flex:1; }
+  .spawn-card .info .name{ font-size:15px; }
+  .spawn-card .info .dist{ font-size:12.5px; color:var(--ink-dim); margin-top:2px; }
+  .spawn-card button{
+    padding:8px 14px; border-radius:10px; border:none; font-size:13px; font-weight:600;
+    background:var(--rift-dim); color:#c9fff2;
+  }
+  .spawn-card button.ready{ background:var(--rift); color:#08211c; }
+  .spawn-card button:disabled{ opacity:0.5; }
+
+  /* --- Encounter --- */
+  .encounter{ text-align:center; padding-top:6px; }
+  .monster-glyph{ font-size:80px; filter:drop-shadow(0 0 30px rgba(232,85,107,0.35)); }
+  .monster-name{ font-size:20px; margin:8px 0 2px; }
+  .monster-tag{ font-size:13px; color:var(--ink-dim); font-family:-apple-system,sans-serif; margin-bottom:14px;}
+
+  /* ---------- rank progression ---------- */
+  body{ transition:background 0.8s ease, background-image 0.8s ease; }
+  body.rank-normal{
+    background-color:#0b0b10;
+    background-image:
+      radial-gradient(circle at 20% 15%, rgba(255,255,255,.035) 0 1px, transparent 1px),
+      radial-gradient(circle at 80% 70%, rgba(255,255,255,.025) 0 1px, transparent 1px);
+    background-size:90px 90px, 130px 130px;
+  }
+  body.rank-iron{
+    background-color:#16181b;
+    background-image:
+      repeating-linear-gradient(7deg, rgba(255,255,255,.035) 0 1px, transparent 1px 7px),
+      repeating-linear-gradient(97deg, rgba(0,0,0,.16) 0 2px, transparent 2px 11px),
+      linear-gradient(135deg, #25282c, #101114 45%, #292d31);
+  }
+  body.rank-bronze{
+    background-color:#211711;
+    background-image:
+      repeating-linear-gradient(17deg, rgba(255,220,170,.035) 0 1px, transparent 1px 8px),
+      linear-gradient(135deg, #3a2619, #17100c 50%, #332016);
+  }
+  body.rank-silver{
+    background-color:#171a1d;
+    background-image:
+      repeating-linear-gradient(9deg, rgba(255,255,255,.045) 0 1px, transparent 1px 6px),
+      linear-gradient(135deg, #30363b, #111418 52%, #252a2e);
+  }
+  body.rank-gold{
+    background-color:#211a0b;
+    background-image:
+      repeating-linear-gradient(13deg, rgba(255,236,170,.04) 0 1px, transparent 1px 8px),
+      linear-gradient(135deg, #4a3815, #181207 52%, #39290e);
+  }
+  body.rank-diamond{
+    background-color:#10161b;
+    background-image:
+      linear-gradient(125deg, rgba(255,255,255,.08) 0 1px, transparent 1px 55px),
+      linear-gradient(35deg, rgba(170,220,255,.055) 0 1px, transparent 1px 42px),
+      linear-gradient(135deg, #253540, #0c1116 48%, #20303b);
+  }
+  .rank-label{ letter-spacing:1.2px; }
+
+  .meditation-box{margin-top:8px;padding:9px 11px;border:1px solid rgba(255,255,255,.08);border-radius:9px;background:rgba(0,0,0,.18)}
+  .meditation-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .meditation-btn{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:inherit;border-radius:8px;padding:7px 10px;cursor:pointer;font:inherit}
+  .meditation-btn.active{border-color:var(--rift);color:var(--rift)}
+  .meditation-note{font-size:11px;color:var(--ink-dim);margin-top:5px;line-height:1.35}
+
+  .ability-level{
+    margin-top:7px;
+    height:6px;
+    background:rgba(255,255,255,.08);
+    border-radius:99px;
+    overflow:hidden;
+    border:1px solid rgba(255,255,255,.05);
+  }
+  .ability-level > div{
+    height:100%;
+    width:0%;
+    background:var(--rift);
+    transition:width .35s ease;
+  }
+  .ability-level-text{
+    margin-top:4px;
+    font-size:11px;
+    color:var(--ink-dim);
+    font-family:-apple-system,sans-serif;
+  }
+
+  .hpbar-wrap{ background:var(--panel); border-radius:10px; height:18px; overflow:hidden; border:1px solid var(--panel-edge); }
+  .hpbar{ height:100%; background:linear-gradient(90deg,var(--danger),#ff9a6b); transition:width 0.4s; }
+  .hp-label{ font-size:12px; color:var(--ink-dim); margin-top:6px; font-family:-apple-system,sans-serif; }
+  .combat-hp{ margin:12px 0 10px; padding:10px 12px; background:rgba(0,0,0,.14); border:1px solid var(--panel-edge); border-radius:11px; }
+  .combat-hp-head{ display:flex; justify-content:space-between; gap:10px; margin-bottom:6px; font-family:-apple-system,sans-serif; font-size:10px; letter-spacing:.8px; color:var(--ink-dim); font-weight:700; }
+  .move-card{
+    margin-top:22px; background:var(--panel); border:1px solid var(--panel-edge); border-radius:16px; padding:22px 16px;
+  }
+  .move-card .move-name{ font-size:17px; margin-bottom:4px; }
+  .move-card .move-hint{ font-size:13px; color:var(--ink-dim); font-family:-apple-system,sans-serif; margin-bottom:12px; }
+  .type-badge{
+    display:inline-block; font-size:12px; padding:4px 12px; border-radius:20px; margin-bottom:14px;
+    background:var(--void); border:1px solid var(--panel-edge);
+  }
+  .type-badge.strong{ color:var(--uncommon); border-color:var(--uncommon); }
+  .type-badge.weak{ color:var(--danger); border-color:var(--danger); }
+  .type-badge.even{ color:var(--ink-dim); }
+  .ability-picker{
+    display:flex; gap:8px; overflow-x:auto; padding:2px 2px 4px; margin:16px 0 4px; justify-content:center; flex-wrap:wrap;
+  }
+  .ability-chip{
+    display:flex; align-items:center; gap:6px; padding:8px 12px; border-radius:20px; font-size:12.5px;
+    background:var(--panel); border:1px solid var(--panel-edge); color:var(--ink-dim); white-space:nowrap;
+  }
+  .ability-chip.active{ border-color:var(--rift); color:var(--ink); background:var(--rift-dim); }
+  .effort-ring{
+    width:120px; height:120px; margin:0 auto 14px; border-radius:50%;
+    background: conic-gradient(var(--rift) calc(var(--pct,0)*1%), var(--panel-edge) 0);
+    display:flex; align-items:center; justify-content:center; transition:background 0.15s;
+  }
+  .effort-ring .inner{
+    width:96px; height:96px; border-radius:50%; background:var(--void); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; font-family:-apple-system,sans-serif;
+  }
+  .effort-ring .inner .big{ font-size:22px; font-weight:700; }
+  .effort-ring .inner .small{ font-size:11px; color:var(--ink-dim); }
+
+  .movement-setting{margin:10px auto 8px;max-width:390px}
+  .movement-toggle{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--panel-edge);border-radius:10px;background:rgba(0,0,0,.10);cursor:pointer;font-family:-apple-system,sans-serif}
+  .movement-toggle input{position:absolute;opacity:0;pointer-events:none}
+  .toggle-slider{position:relative;flex:0 0 auto;width:42px;height:24px;border-radius:99px;background:var(--panel-edge);transition:.2s}
+  .toggle-slider:after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--ink-dim);transition:.2s}
+  .movement-toggle input:checked + .toggle-slider{background:var(--rift)}
+  .movement-toggle input:checked + .toggle-slider:after{left:21px;background:#fff}
+  .movement-toggle strong{display:block;font-size:12px;letter-spacing:.3px}
+  .movement-toggle small{display:block;margin-top:2px;color:var(--ink-dim);font-size:10px}
+  .charge-power{
+    margin:8px auto 16px;
+    max-width:390px;
+    padding:11px 12px 10px;
+    border:1px solid var(--panel-edge);
+    border-radius:12px;
+    background:rgba(0,0,0,.16);
+    text-align:left;
+  }
+  .charge-power-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    gap:10px;
+    margin-bottom:8px;
+    font-family:-apple-system,sans-serif;
+    font-size:12px;
+    letter-spacing:1px;
+  }
+  .charge-power-label{ color:var(--ink-dim); font-weight:700; }
+  .charge-power-value{ font-size:20px; font-weight:900; letter-spacing:.5px; }
+  .charge-power-track{
+    position:relative;
+    height:18px;
+    border-radius:99px;
+    overflow:hidden;
+    background:rgba(255,255,255,.10);
+    border:1px solid var(--panel-edge);
+    box-shadow:inset 0 1px 3px rgba(0,0,0,.35);
+  }
+  .charge-power-fill{
+    height:100%;
+    width:0%;
+    border-radius:99px;
+    background:linear-gradient(90deg,var(--ink-dim),var(--rift));
+    transition:width .18s ease;
+    min-width:0;
+  }
+  .charge-power-marker{
+    position:absolute;
+    left:75%;
+    top:0;
+    bottom:0;
+    width:2px;
+    background:rgba(255,255,255,.65);
+    pointer-events:none;
+  }
+  .charge-power-levels{
+    display:flex;
+    justify-content:space-between;
+    margin-top:4px;
+    font-family:-apple-system,sans-serif;
+    font-size:8px;
+    letter-spacing:.7px;
+    color:var(--ink-dim);
+  }
+  .charge-power-status{
+    margin-top:7px;
+    text-align:center;
+    font-family:-apple-system,sans-serif;
+    font-size:11px;
+    font-weight:600;
+    color:var(--ink-dim);
+    min-height:15px;
+  }
+
+  /* --- Inventory --- */
+  .tally-row{ display:flex; gap:8px; margin-bottom:18px; }
+  .tally{
+    flex:1; background:var(--panel); border:1px solid var(--panel-edge); border-radius:12px; padding:10px 6px;
+    text-align:center; font-family:-apple-system,sans-serif;
+  }
+  .tally .n{ font-size:18px; font-weight:700; }
+  .tally .label{ font-size:10.5px; margin-top:2px; }
+  .ability-list{ display:flex; flex-direction:column; gap:10px; }
+  .ability-card{
+    background:var(--panel); border:1px solid var(--panel-edge); border-radius:14px; padding:13px 15px;
+    display:flex; align-items:center; gap:12px; font-family:-apple-system,sans-serif;
+  }
+  .ability-card .icon{ font-size:24px; width:32px; text-align:center; }
+  .ability-card .name{ font-size:14.5px; }
+  .ability-card .exercise{ font-size:12px; color:var(--ink-dim); margin-top:1px; }
+  .ability-card.locked{ opacity:0.35; }
+  .essence-section{background:var(--panel);border:1px solid var(--panel-edge);border-radius:16px;padding:14px;margin-bottom:12px;}
+  .essence-section-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+  .essence-section-head .essence-icon{font-size:28px;}
+  .essence-section-head .essence-info{flex:1;}
+  .essence-section-head .essence-name{font-size:16px;}
+  .essence-section-head .essence-progress{font-family:-apple-system,sans-serif;font-size:11px;color:var(--ink-dim);margin-top:2px;}
+  .awakening-track{display:flex;gap:5px;align-items:stretch;}
+  .awakening-stage{flex:1;min-width:0;text-align:center;padding:9px 3px 8px;border:1px solid var(--panel-edge);border-radius:10px;background:var(--void);font-family:-apple-system,sans-serif;}
+  .awakening-stage.unlocked{border-color:var(--rift-dim);background:rgba(62,230,196,0.07);}
+  .awakening-stage.current{border-color:var(--rift);}
+  .awakening-stage.next{border-color:var(--legendary);background:rgba(240,165,60,0.06);}
+  .awakening-stage .stage-icon{font-size:16px;line-height:1;}
+  .awakening-stage .stage-num{font-size:9px;color:var(--ink-dim);margin-top:4px;}
+  .awakening-stage .stage-name{font-size:9.5px;line-height:1.15;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .awakening-stage .stage-exercise{font-size:8.5px;line-height:1.15;color:var(--ink-dim);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .awakening-stage .stone-needed{font-size:8px;color:var(--legendary);margin-top:4px;}
+  .awakening-stage .check{color:var(--rift);font-size:11px;}
+  .essence-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:14px; }
+  .essence-chip{
+    aspect-ratio:1; border-radius:12px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-family:-apple-system,sans-serif; font-size:11px; gap:2px; border:1px solid var(--panel-edge);
+  }
+  .essence-chip .ic{ font-size:20px; }
+  .hoard-list{ display:flex; flex-direction:column; gap:8px; }
+  .hoard-row{
+    display:flex; align-items:center; gap:12px; background:var(--panel); border:1px solid var(--panel-edge);
+    border-radius:14px; padding:11px 13px; font-family:-apple-system,sans-serif;
+  }
+  .hoard-row .ic{ font-size:22px; width:28px; text-align:center; }
+  .hoard-row .info{ flex:1; }
+  .hoard-row .info .name{ font-size:14px; }
+  .hoard-row .info .sub{ font-size:11.5px; color:var(--ink-dim); margin-top:1px; }
+  .artifact-card{
+    background:linear-gradient(135deg, rgba(240,165,60,0.08), var(--panel));
+    border:1px solid rgba(240,165,60,0.35); border-radius:16px; padding:15px;
+    font-family:-apple-system,sans-serif; margin-top:10px;
+  }
+  .artifact-card .artifact-title{font-size:15px;}
+  .artifact-card .artifact-sub{font-size:12px;color:var(--ink-dim);line-height:1.45;margin-top:5px;}
+  .hoard-row button{
+    padding:8px 14px; border-radius:10px; border:none; font-size:12.5px; font-weight:600;
+    background:var(--rift); color:#08211c; white-space:nowrap;
+  }
+  .confluence-builder-chip{
+    display:inline-flex; align-items:center; gap:6px; padding:8px 12px; border-radius:20px; font-size:12.5px;
+    background:var(--panel); border:1px solid var(--panel-edge); color:var(--ink-dim); margin:0 6px 8px 0;
+    font-family:-apple-system,sans-serif;
+  }
+  .confluence-builder-chip.selected{ border-color:var(--legendary); color:var(--ink); background:rgba(240,165,60,0.12); }
+
+  /* --- nav --- */
+  nav.tabs{
+    position:absolute; left:0; right:0; bottom:0; display:flex; background:var(--void);
+    border-top:1px solid var(--panel-edge); padding-bottom:env(safe-area-inset-bottom);
+  }
+  nav.tabs button{
+    flex:1; background:none; border:none; padding:12px 0 10px; color:var(--ink-dim);
+    font-family:-apple-system,sans-serif; font-size:11px; display:flex; flex-direction:column; align-items:center; gap:3px;
+  }
+  nav.tabs button.active{ color:var(--rift); }
+  nav.tabs .ic{ font-size:20px; }
+
+  /* --- lock overlay --- */
+  #lockOverlay{
+    position:fixed; inset:0; background:rgba(8,7,15,0.97); z-index:50; display:flex;
+    flex-direction:column; align-items:center; justify-content:center; color:var(--ink);
+    font-family:-apple-system,sans-serif; touch-action:none;
+  }
+  #lockOverlay .lockglyph{ font-size:40px; margin-bottom:14px; opacity:0.7; }
+  #lockOverlay .track{
+    width:260px; height:56px; border-radius:28px; background:var(--panel); border:1px solid var(--panel-edge);
+    position:relative; margin-top:22px; overflow:hidden;
+  }
+  #lockOverlay .thumb{
+    position:absolute; left:3px; top:3px; width:50px; height:50px; border-radius:50%; background:var(--rift);
+    display:flex; align-items:center; justify-content:center; font-size:20px; color:#08211c;
+  }
+  #lockOverlay .track-label{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:13px; color:var(--ink-dim); }
+  .lock-fab{
+    position:absolute; right:16px; bottom:96px; width:48px; height:48px; border-radius:50%; background:var(--panel);
+    border:1px solid var(--panel-edge); display:flex; align-items:center; justify-content:center; font-size:20px; z-index:10;
+  }
+
+  /* --- reward modal --- */
+  #rewardModal{
+    position:fixed; inset:0; background:rgba(8,7,15,0.9); z-index:40; display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  #rewardModal .card{
+    background:var(--panel); border:1px solid var(--panel-edge); border-radius:20px; padding:30px 24px; text-align:center; max-width:340px; width:100%;
+  }
+  #rewardModal .glyph{ font-size:56px; }
+  #rewardModal .rarity{ font-family:-apple-system,sans-serif; font-size:12px; letter-spacing:1px; margin-top:6px; }
+  #rewardModal h3{ font-size:19px; margin:8px 0 6px; font-weight:400; }
+  #rewardModal p{ color:var(--ink-dim); font-size:13.5px; font-family:-apple-system,sans-serif; line-height:1.5; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header class="top">
+    <h1>Riftbound</h1>
+    <div class="mana ui-font rank-label" id="headerStat">Rank: Normal</div>
+  </header>
+
+  <!-- HOME -->
+  <section class="screen" id="screen-home">
+    <div class="hero">
+      <div class="glyph">◈</div>
+      <h2>The rifts are stirring</h2>
+      <p>Ambient magic is spiking nearby. Move your body, close the distance, and put down what comes through.</p>
+      <button class="btn ui-font" id="btnBegin">Attune &amp; begin</button>
+      <div class="status-line" id="permStatus"></div>
+      <div id="locError" class="hide" style="margin-top:14px; text-align:left; background:var(--panel); border:1px solid var(--danger); border-radius:12px; padding:14px; font-family:-apple-system,sans-serif; font-size:13.5px; color:var(--ink);">
+        <div id="locErrorText" style="margin-bottom:10px;"></div>
+        <button class="btn ui-font" id="btnRetryLoc" style="margin-top:0;">Try again</button>
+        <button class="btn secondary ui-font" id="btnDemoLoc">Use a demo location instead</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAP -->
+  <section class="screen hide" id="screen-map">
+    <div id="leafletMap"></div>
+    <div class="status-line" id="mapStatus">Locating rifts…</div>
+    <div class="status-line ui-font" id="fixIndicator" style="margin-top:2px; opacity:0.7;"></div>
+    <div class="spawn-list" id="spawnList"></div>
+  </section>
+
+  <!-- ENCOUNTER -->
+  <section class="screen hide" id="screen-encounter">
+    <div class="encounter">
+      <div class="monster-glyph" id="encGlyph">◉</div>
+      <div class="monster-name" id="encName">—</div>
+      <div class="monster-tag" id="encTag">—</div>
+
+      <div class="ability-picker ui-font" id="abilityPicker"></div>
+
+      <div class="movement-setting ui-font">
+        <label class="movement-toggle">
+          <input type="checkbox" id="movementTrackingToggle" checked>
+          <span class="toggle-slider" aria-hidden="true"></span>
+          <span><strong>Track movement</strong><small id="movementTrackingHint">Phone movement affects attack power</small></span>
+        </label>
+      </div>
+
+      <div class="move-card">
+        <div class="move-name ui-font" id="moveName">Channel essence</div>
+        <div class="move-hint ui-font" id="moveHint">Keep moving — effort matters more than form.</div>
+        <div class="type-badge ui-font" id="typeBadge"></div>
+        <div class="effort-ring" id="effortRing"><div class="inner"><div class="big" id="effortPct">0%</div><div class="small" id="effortLabel">movement</div></div></div>
+
+        <div class="charge-power">
+          <div class="charge-power-head">
+            <span class="charge-power-label">ATTACK POWER</span>
+            <span class="charge-power-value" id="chargePowerValue">0%</span>
+          </div>
+          <div class="charge-power-track" aria-label="Current attack power">
+            <div class="charge-power-fill" id="chargePowerFill"></div>
+            <div class="charge-power-marker"></div>
+          </div>
+          <div class="charge-power-levels" aria-hidden="true">
+            <span>LOW</span><span>GOOD</span><span>STRONG</span><span>MAX</span>
+          </div>
+          <div class="charge-power-status" id="chargePowerStatus" aria-live="polite">Start moving to build power.</div>
+        </div>
+        <div class="status-line ui-font" id="channelStatus" style="margin-top:-4px;"></div>
+
+        <div class="combat-hp">
+          <div class="combat-hp-head">
+            <span>RIFT VITALITY</span>
+            <span id="hpLabel">0 / 0</span>
+          </div>
+          <div class="hpbar-wrap"><div class="hpbar" id="hpbar" style="width:100%"></div></div>
+        </div>
+
+        <button class="btn ui-font" id="btnChannel">Start 30-second move</button>
+      </div>
+      <button class="btn secondary ui-font" id="btnFlee" style="margin-top:10px;">Retreat</button>
+    </div>
+  </section>
+
+  <!-- INVENTORY -->
+  <section class="screen hide" id="screen-inv">
+    <div class="tally-row">
+      <div class="tally"><div class="n" id="tallyEssence">0</div><div class="label">essences</div></div>
+      <div class="tally"><div class="n" id="tallyStones">0</div><div class="label">awakening stones</div></div>
+      <div class="tally"><div class="n" id="tallyAbilities">0</div><div class="label">abilities awakened</div></div>
+    </div>
+    <div class="ability-list" id="abilityList"></div>
+
+    <div class="status-line ui-font" style="text-align:left; margin:20px 0 0;">Confluences</div>
+    <div class="ability-list" id="confluenceList" style="margin-top:10px;"></div>
+    <div id="confluenceBuilder" style="margin-top:10px;"></div>
+
+    <div class="status-line ui-font" style="text-align:left; margin:20px 0 0;">Essence hoard</div>
+    <div class="hoard-list" id="essenceGrid"></div>
+
+    <div class="status-line ui-font" style="text-align:left; margin:20px 0 0;">Awakening stones</div>
+    <div class="hoard-list" id="stoneGrid"></div>
+
+    <div class="status-line ui-font" style="text-align:left; margin:24px 0 0;">Testing</div>
+    <button class="btn danger ui-font" id="btnResetTest" style="margin-top:10px;">Reset character</button>
+    <div class="status-line ui-font" style="text-align:left; margin-top:8px;">
+      Clears this device's Riftbound save so you can test the game from the beginning.
+    </div>
+  </section>
+
+  <nav class="tabs ui-font">
+    <button class="tab-btn active" data-tab="home"><span class="ic">◈</span>Home</button>
+    <button class="tab-btn" data-tab="map"><span class="ic">◎</span>Rifts</button>
+    <button class="tab-btn" data-tab="inv"><span class="ic">⬡</span>Hoard</button>
+  </nav>
+
+  <button class="lock-fab hide" id="lockFab">🔒</button>
+</div>
+
+<div id="lockOverlay" class="hide">
+  <div class="lockglyph">🔒</div>
+  <div>Pocket lock is on</div>
+  <div class="track" id="unlockTrack">
+    <div class="thumb" id="unlockThumb">›</div>
+    <div class="track-label">slide to unlock</div>
+  </div>
+</div>
+
+<div id="awakeningModal" class="hide" style="position:fixed;inset:0;background:rgba(8,7,15,.94);z-index:45;display:flex;align-items:center;justify-content:center;padding:24px;"><div style="background:var(--panel);border:1px solid var(--legendary);border-radius:20px;padding:30px 24px;text-align:center;max-width:340px;width:100%;"><div style="font-size:14px;letter-spacing:2px;color:var(--legendary);font-family:-apple-system,sans-serif;">AWAKENING</div><div id="awGlyph" style="font-size:56px;margin:12px 0 4px;">✦</div><h3 id="awName" style="font-size:22px;margin:6px 0;font-weight:400;">New Ability</h3><div id="awExercise" style="font-family:-apple-system,sans-serif;color:var(--rift);font-size:14px;">Exercise</div><p id="awDesc" style="color:var(--ink-dim);font-size:13.5px;font-family:-apple-system,sans-serif;line-height:1.5;">A new ability has awakened.</p><button class="btn ui-font" id="awClose" style="margin-top:18px;">Embrace it</button></div></div>
+<div id="rewardModal" class="hide">
+  <div class="card">
+    <div class="glyph" id="rwGlyph">✦</div>
+    <div class="rarity ui-font" id="rwRarity">COMMON</div>
+    <h3 id="rwName">Ember Fragment</h3>
+    <p id="rwDesc">A shard of restless heat. It wants to be run off.</p>
+    <button class="btn ui-font" id="rwClose" style="margin-top:18px;">Keep it</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- essence themes (12, arranged in a rivalry cycle) ----------
+  // Each essence beats the one before it in this list, and is weak to the one after it (wraps around).
+  const THEMES = {
+    ember:{name:"Ember",icon:"🔥",color:"#ef5350",exercises:["Jog on the spot","Butt kicks","Fast feet","Star jumps","High knees","Squat jumps","Burpees","Skater steps","Knee drives","Side steps","Power squats","Step-ups","Mountain climbers","Sprint on the spot"],abilities:[{name:"Ember Sprint",exercise:"Jog on the spot"},{name:"Ember Rush",exercise:"Butt kicks"},{name:"Ember Flare",exercise:"Star jumps"},{name:"Ember Surge",exercise:"High knees"},{name:"Inferno",exercise:"Burpees"}]},
+    gale:{name:"Gale",icon:"🌪️",color:"#64d8cb",exercises:["Jumping jacks","Side steps","Lateral hops","Skater steps","Star jumps","Fast feet","High knees","Lateral shuffles","Knee drives","Seal jacks","Speed skaters","Skater jumps","Butt kicks","Jog on the spot"],abilities:[{name:"Gale Jacks",exercise:"Jumping jacks"},{name:"Gale Step",exercise:"Side steps"},{name:"Gale Sweep",exercise:"Skater steps"},{name:"Gale Tempest",exercise:"Lateral shuffles"},{name:"Tempest",exercise:"Speed skaters"}]},
+    volt:{name:"Volt",icon:"⚡",color:"#ab6ef0",exercises:["High knees","Fast feet","Mountain climbers","Lateral hops","Skater jumps","Star jumps","Jog on the spot","Butt kicks","Squat jumps","Burpees","Lateral shuffles","Split jumps","Knee drives","Sprint on the spot"],abilities:[{name:"Volt Burst",exercise:"High knees"},{name:"Volt Surge",exercise:"Fast feet"},{name:"Volt Strike",exercise:"Skater jumps"},{name:"Volt Overload",exercise:"Mountain climbers"},{name:"Thunderstrike",exercise:"Split jumps"}]},
+    tide:{name:"Tide",icon:"🌊",color:"#4f9bef",exercises:["Push-ups","Incline push-ups","Knee push-ups","Plank shoulder taps","Bear plank","Slow mountain climbers","Glute bridges","Dead bugs","Bird dogs","Plank hold","Bear crawl","Push-up pulses","Wall push-ups","Controlled squats"],abilities:[{name:"Tide Press",exercise:"Push-ups"},{name:"Tide Flow",exercise:"Plank shoulder taps"},{name:"Tide Current",exercise:"Slow mountain climbers"},{name:"Tide Breaker",exercise:"Bear crawl"},{name:"Maelstrom",exercise:"Push-up pulses"}]},
+    frost:{name:"Frost",icon:"❄️",color:"#8fd9ff",exercises:["Plank hold","Wall sit","Glute bridge hold","Single-leg balance","Dead bug hold","Squat hold","Side plank","Calf raise hold","Lunge hold","Bear plank","Hollow hold","Chair pose","Push-up hold","Static knee hold"],abilities:[{name:"Frost Hold",exercise:"Plank hold"},{name:"Frost Brace",exercise:"Wall sit"},{name:"Frost Guard",exercise:"Squat hold"},{name:"Frost Bastion",exercise:"Side plank"},{name:"Absolute Zero",exercise:"Single-leg balance"}]},
+    stone:{name:"Stone",icon:"⛰️",color:"#c9a15a",exercises:["Squats","Reverse lunges","Glute bridges","Calf raises","Wall sit","Split squats","Squat pulses","Step-ups","Lunges","Chair squat hold","Hip hinges","Single-leg sit-to-stand","Slow squats","Static lunge hold"],abilities:[{name:"Stone Stance",exercise:"Squats"},{name:"Stone Lunge",exercise:"Reverse lunges"},{name:"Stone Breaker",exercise:"Split squats"},{name:"Stone Bastion",exercise:"Wall sit"},{name:"Mountain's Heart",exercise:"Single-leg sit-to-stand"}]},
+    verdant:{name:"Verdant",icon:"🌿",color:"#6fbf4f",exercises:["Lunges","Walking lunges","Side lunges","Reverse lunges","Glute bridges","Bird dogs","Calf raises","Step-ups","Hip hinges","Squat to reach","Standing knee drives","Single-leg balance","Slow squats","Side leg raises"],abilities:[{name:"Verdant Lunge",exercise:"Lunges"},{name:"Verdant Root",exercise:"Glute bridges"},{name:"Verdant Branch",exercise:"Bird dogs"},{name:"Verdant Bloom",exercise:"Step-ups"},{name:"Worldroot",exercise:"Single-leg balance"}]},
+    fauna:{name:"Fauna",icon:"🐾",color:"#c98b5a",exercises:["Bear crawl","Bear plank","Crab walk","Duck walk","Beast hold","Frog squats","Lateral bear crawl","Quadruped shoulder taps","Animal walks","Crawl hold","Squat walks","Bear plank taps","Frog jumps","Beast crawl"],abilities:[{name:"Fauna Crawl",exercise:"Bear crawl"},{name:"Fauna Prowl",exercise:"Duck walk"},{name:"Fauna Stalk",exercise:"Crab walk"},{name:"Fauna Frenzy",exercise:"Frog squats"},{name:"Primal Fury",exercise:"Frog jumps"}]},
+    umbra:{name:"Umbra",icon:"🌑",color:"#8b7fc7",exercises:["Mountain climbers","Plank shoulder taps","Reverse lunges","Dead bugs","Side plank","Bear crawl","Slow squats","Cross-body knee drives","Plank reaches","Crawl hold","Lateral lunges","Standing cross crunches","Dead bug hold","Slow mountain climbers"],abilities:[{name:"Umbra Climb",exercise:"Mountain climbers"},{name:"Umbra Veil",exercise:"Plank shoulder taps"},{name:"Umbra Step",exercise:"Reverse lunges"},{name:"Umbra Eclipse",exercise:"Cross-body knee drives"},{name:"Eternal Night",exercise:"Standing cross crunches"}]},
+    lux:{name:"Lux",icon:"✨",color:"#f4d35e",exercises:["Burpees","Star jumps","Squat jumps","High knees","Jumping jacks","Fast feet","Mountain climbers","Skater jumps","Knee drives","Power squats","Seal jacks","Split jumps","Speed skaters","Step-ups"],abilities:[{name:"Lux Flash",exercise:"Burpees"},{name:"Lux Spark",exercise:"Star jumps"},{name:"Lux Radiance",exercise:"Squat jumps"},{name:"Lux Nova",exercise:"Skater jumps"},{name:"Supernova",exercise:"Split jumps"}]},
+    aether:{name:"Aether",icon:"🔮",color:"#d68fe0",exercises:["Balance hold","Single-leg balance","Bird dogs","Dead bugs","Heel-to-toe balance","Standing knee hold","Tree pose","Slow lunges","Calf raise balance","Side leg balance","Plank balance","Single-leg hinge","Warrior balance","Standing reach balance"],abilities:[{name:"Aether Balance",exercise:"Balance hold"},{name:"Aether Drift",exercise:"Bird dogs"},{name:"Aether Poise",exercise:"Single-leg balance"},{name:"Aether Veil",exercise:"Tree pose"},{name:"Transcendence",exercise:"Single-leg hinge"}]},
+    iron:{name:"Iron",icon:"⚙️",color:"#9aa0a6",exercises:["Wall sit","Squats","Push-ups","Plank hold","Calf raises","Split squats","Glute bridges","Chair pose","Push-up hold","Squat hold","Lunges","Plank shoulder taps","Slow squats","Static lunge hold"],abilities:[{name:"Iron Wall",exercise:"Wall sit"},{name:"Iron Guard",exercise:"Push-up hold"},{name:"Iron Brace",exercise:"Plank hold"},{name:"Iron Hammer",exercise:"Split squats"},{name:"Unbreakable",exercise:"Squat hold"}]}
+  };
+
+  const THEME_KEYS = Object.keys(THEMES);
+  THEME_KEYS.forEach((k,i)=>{
+    THEMES[k].beats=THEME_KEYS[(i-1+THEME_KEYS.length)%THEME_KEYS.length];
+    THEMES[k].weak=THEME_KEYS[(i+1)%THEME_KEYS.length];
+  });
+
+  function getDiscoveredIndices(themeKey){
+    const d=state.discoveries && state.discoveries[themeKey];
+    if(Array.isArray(d)) return d;
+    const count=Math.max(0,Math.min(5,Number(state.abilities[themeKey]||0)));
+    return Array.from({length:count},(_,i)=>i);
+  }
+
+  function discoverAbility(themeKey){
+    const t=THEMES[themeKey];
+    const discovered=getDiscoveredIndices(themeKey);
+    const candidates=[];
+    for(let i=1;i<t.abilities.length;i++) if(!discovered.includes(i)) candidates.push(i);
+    if(!candidates.length) return null;
+    const chosen=candidates[Math.floor(Math.random()*candidates.length)];
+    state.discoveries[themeKey]=[...discovered,chosen];
+    state.abilities[themeKey]=state.discoveries[themeKey].length;
+    return chosen;
+  }
+
+  const RARITIES = [
+    { key:"common",    label:"COMMON",    weight:55, color:"var(--common)",    hpMult:1.0 },
+    { key:"uncommon",  label:"UNCOMMON",  weight:25, color:"var(--uncommon)",  hpMult:1.3 },
+    { key:"rare",      label:"RARE",      weight:12, color:"var(--rare)",      hpMult:1.7 },
+    { key:"epic",      label:"EPIC",      weight:6,  color:"var(--epic)",     hpMult:2.2 },
+    { key:"legendary", label:"LEGENDARY", weight:2,  color:"var(--legendary)", hpMult:3.0 },
+  ];
+
+  const MONSTER_NAMES = {
+    ember:   ["Cinder Hound","Ember Wisp","Scorch Fang","Blaze Stalker"],
+    gale:    ["Squall Sprite","Gust Wraith","Draft Runner","Zephyr Mote"],
+    volt:    ["Static Mote","Spark Stalker","Arc Wisp","Fulmen Husk"],
+    tide:    ["Fen Wraith","Undertow Sprite","Brine Stalker","Riptide Mote"],
+    frost:   ["Rime Wisp","Glacial Stalker","Hoarfrost Wraith","Chill Husk"],
+    stone:   ["Husk Stalker","Granite Grazer","Rubble Wraith","Cairn Mote"],
+    verdant: ["Gloom Sprite","Bramble Stalker","Moss Wraith","Root Husk"],
+    fauna:   ["Pale Grazer","Fang Stalker","Feral Wisp","Prowling Husk"],
+    umbra:   ["Fault Wraith","Shade Stalker","Umbral Mote","Gloam Husk"],
+    lux:     ["Glare Sprite","Radiant Stalker","Lumen Wisp","Flare Mote"],
+    aether:  ["Drift Wraith","Aether Stalker","Echo Sprite","Void Mote"],
+    iron:    ["Rust Stalker","Iron Husk","Shrapnel Wraith","Plated Grazer"],
+  };
+
+  // ---------- state ----------
+  let state = load();
+  state.essences = state.essences || {};
+  state.stones = state.stones || {};
+  state.abilities = state.abilities || {};
+  state.discoveries = state.discoveries || {};
+  state.confluences = state.confluences || {};
+  state.abilityProgress = state.abilityProgress || {};
+  state.meditationTarget = state.meditationTarget || null;
+  state.level = state.level || 1;
+  function load(){
+    try{
+      const raw = localStorage.getItem("riftbound_save");
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return { essences:{}, stones:{}, abilities:{}, discoveries:{}, abilityProgress:{}, meditationTarget:null, confluences:{}, level:1 };
+  }
+  function save(){ try{ localStorage.setItem("riftbound_save", JSON.stringify(state)); }catch(e){} }
+
+
+  // ---------- meditation ----------
+  function getMeditationTarget(){ return state.meditationTarget || null; }
+  function setMeditationTarget(themeKey, idx){
+    idx=Number(idx);
+    if(!getDiscoveredIndices(themeKey).includes(idx)) return;
+    const key=abilityProgressKey(themeKey,idx);
+    state.meditationTarget = getMeditationTarget()===key ? null : key;
+    save();
+    renderInventory();
+  }
+  function awardMeditationProgress(amount){
+    const target=getMeditationTarget();
+    if(!target) return false;
+    const parts=target.split("#"), themeKey=parts[0], idx=Number(parts[1]);
+    if(getAbilityProgress(themeKey,idx)>=100) return false;
+    const key=abilityProgressKey(themeKey,idx);
+    state.abilityProgress[key]=Math.min(100,getAbilityProgress(themeKey,idx)+amount);
+    save();
+    return true;
+  }
+
+  // ---------- rank + ability mastery ----------
+  // At Normal rank, every completed use of an awakened Essence ability
+  // increases that ability's mastery by 10%, capped at 100%.
+  function abilityProgressKey(themeKey, idx){ return themeKey+"#"+idx; }
+
+  function getAbilityProgress(themeKey, idx){
+    const key = abilityProgressKey(themeKey, idx);
+    return Math.max(0, Math.min(100, Number(state.abilityProgress[key] || 0)));
+  }
+
+  function awardAbilityProgress(themeKey, idx){
+    if(!state.abilityProgress) state.abilityProgress = {};
+    const key = abilityProgressKey(themeKey, idx);
+    const before = getAbilityProgress(themeKey, idx);
+    const after = Math.min(100, before + 10);
+    state.abilityProgress[key] = after;
+    save();
+    return {before, after, gained:after-before};
+  }
+
+  function getRank(){
+    const ownedCount = ownedEssenceTypes().length;
+    if(ownedCount < 4) return "Normal";
+
+    // Iron begins once the character has the full set of four Essences.
+    // Bronze begins when every currently awakened Essence ability is mastered.
+    const ownedKeys = ownedEssenceTypes();
+    const hasAllAbilities = ownedKeys.length >= 4 && ownedKeys.every(k=>getDiscoveredIndices(k).length >= 5);
+    const discoveredKeys = [];
+    ownedKeys.forEach(k=>{
+      getDiscoveredIndices(k).forEach(idx=>discoveredKeys.push(abilityProgressKey(k,idx)));
+    });
+
+    if(hasAllAbilities && discoveredKeys.length > 0 && discoveredKeys.every(key=>{
+      const [themeKey, idxText] = key.split("#");
+      return getAbilityProgress(themeKey, Number(idxText)) >= 100;
+    })) return "Bronze";
+
+    return "Iron";
+  }
+
+  function applyRankTheme(){
+    const rank = getRank();
+    document.body.classList.remove("rank-normal","rank-iron","rank-bronze","rank-silver","rank-gold","rank-diamond");
+    document.body.classList.add("rank-"+rank.toLowerCase());
+    const header = document.getElementById("headerStat");
+    if(header) header.textContent = "Rank: "+rank;
+    return rank;
+  }
+
+
+  // ---------- permissions ----------
+  let userPos = null;
+  let wakeLock = null;
+  let watchId = null;
+  let youMarker = null;
+
+  let pollIntervalId = null;
+
+  function startLocationWatch(){
+    if(!("geolocation" in navigator)) return;
+    if(watchId !== null) navigator.geolocation.clearWatch(watchId);
+    if(pollIntervalId !== null) clearInterval(pollIntervalId);
+
+    const onFix = p=>{
+      userPos = { lat:p.coords.latitude, lng:p.coords.longitude };
+      lastFixAt = Date.now();
+      updateYouMarker();
+      updateFixIndicator();
+      const mapScreen = document.getElementById("screen-map");
+      if(mapScreen && !mapScreen.classList.contains("hide")) refreshSpawnDistances();
+    };
+    const onErr = err=>{
+      console.warn("geolocation watch error", err);
+    };
+
+    watchId = navigator.geolocation.watchPosition(onFix, onErr, { enableHighAccuracy:true, maximumAge:4000, timeout:20000 });
+
+    // Fallback: some mobile browsers quietly stop delivering watchPosition updates
+    // (especially in PWAs or low-power mode). Poll every 12s as a backstop.
+    pollIntervalId = setInterval(()=>{
+      navigator.geolocation.getCurrentPosition(onFix, onErr, { enableHighAccuracy:true, maximumAge:0, timeout:15000 });
+    }, 12000);
+  }
+
+  let lastFixAt = null;
+  function updateFixIndicator(){
+    const el = document.getElementById("fixIndicator");
+    if(!el || !lastFixAt) return;
+    const secsAgo = Math.round((Date.now()-lastFixAt)/1000);
+    el.textContent = "Position updated "+(secsAgo<3 ? "just now" : secsAgo+"s ago");
+  }
+
+  async function requestAll(){
+    const statusEl = document.getElementById("permStatus");
+    const errBox = document.getElementById("locError");
+    const errText = document.getElementById("locErrorText");
+    errBox.classList.add("hide");
+    statusEl.textContent = "Requesting location…";
+
+    const gotLocation = await new Promise((resolve)=>{
+      if(!("geolocation" in navigator)){
+        resolve({ ok:false, reason:"Location isn't available in this browser." });
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        p=>{
+          userPos = { lat:p.coords.latitude, lng:p.coords.longitude };
+          resolve({ ok:true });
+        },
+        err=>{
+          let reason;
+          if(err.code === 1) reason = "Location access was denied. On iPhone: Settings → Privacy & Security → Location Services → Safari Websites → While Using, then reload this page.";
+          else if(err.code === 2) reason = "Your location couldn't be determined right now — GPS or network position may be unavailable.";
+          else reason = "Location took too long to respond.";
+          resolve({ ok:false, reason });
+        },
+        { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+      );
+    });
+
+    if(!gotLocation.ok){
+      statusEl.textContent = "";
+      errText.textContent = gotLocation.reason;
+      errBox.classList.remove("hide");
+      return;
+    }
+
+    if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function"){
+      try{ await DeviceMotionEvent.requestPermission(); }catch(e){}
+    }
+    try{
+      if ("wakeLock" in navigator){ wakeLock = await navigator.wakeLock.request("screen"); }
+    }catch(e){}
+
+    statusEl.textContent = "Attuned. Scanning terrain…";
+    startLocationWatch();
+    await generateSpawns();
+    switchTab("map");
+  }
+
+  document.getElementById("btnRetryLoc").onclick = requestAll;
+  document.getElementById("btnDemoLoc").onclick = async ()=>{
+    userPos = { lat:37.7749, lng:-122.4194 };
+    document.getElementById("locError").classList.add("hide");
+    document.getElementById("permStatus").textContent = "Using demo location (San Francisco). Attuned. Scanning terrain…";
+    await generateSpawns();
+    switchTab("map");
+  };
+
+  // ---------- terrain lookup (parks, footpaths, grass — avoids private/residential land) ----------
+  async function fetchWithTimeout(url, ms){
+    const controller = new AbortController();
+    const timer = setTimeout(()=> controller.abort(), ms);
+    try{
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timer);
+      return res;
+    }catch(e){
+      clearTimeout(timer);
+      throw e;
+    }
+  }
+
+  async function fetchWalkableFeatures(pos){
+    const radius = 450;
+    const query = `[out:json][timeout:20];(` +
+      `way["leisure"="park"](around:${radius},${pos.lat},${pos.lng});` +
+      `way["landuse"~"^(recreation_ground|village_green)$"](around:${radius},${pos.lat},${pos.lng});` +
+      `way["highway"~"^(footway|path|pedestrian|cycleway|track)$"](around:${radius},${pos.lat},${pos.lng});` +
+      `);out geom;`;
+    const endpoints = [
+      "https://overpass-api.de/api/interpreter",
+      "https://overpass.kumi.systems/api/interpreter"
+    ];
+    for(const ep of endpoints){
+      try{
+        const res = await fetchWithTimeout(ep+"?data="+encodeURIComponent(query), 6000);
+        if(!res.ok) continue;
+        const data = await res.json();
+        return data.elements || [];
+      }catch(e){ /* timed out or failed — try next endpoint */ }
+    }
+    return [];
+  }
+
+  function pointsFromFeatures(elements){
+    const pts = [];
+    elements.forEach(el=>{
+      const access = el.tags && el.tags.access;
+      if(access === "private" || access === "no") return; // skip anything explicitly gated off
+      if(el.geometry && el.geometry.length){
+        el.geometry.forEach(g=>{
+          if(g && typeof g.lat === "number") pts.push({ lat:g.lat, lng:g.lon });
+        });
+      }
+    });
+    return pts;
+  }
+
+  document.addEventListener("visibilitychange", async ()=>{
+    if(document.visibilityState === "visible" && !wakeLock && "wakeLock" in navigator){
+      try{ wakeLock = await navigator.wakeLock.request("screen"); }catch(e){}
+    }
+  });
+
+  // ---------- spawns ----------
+  let spawns = [];
+  function metersToDeg(m, lat){
+    return { dLat: m/111320, dLng: m/(111320*Math.cos(lat*Math.PI/180)) };
+  }
+  function haversine(a,b){
+    const R=6371000, toRad=x=>x*Math.PI/180;
+    const dLat=toRad(b.lat-a.lat), dLng=toRad(b.lng-a.lng);
+    const s=Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
+    return 2*R*Math.asin(Math.sqrt(s));
+  }
+  async function generateSpawns(){
+    spawns = [];
+    const mapStatus = document.getElementById("mapStatus");
+    mapStatus.textContent = "Checking nearby parks & footpaths…";
+
+    let candidates = [];
+    try{
+      const elements = await fetchWalkableFeatures(userPos);
+      candidates = pointsFromFeatures(elements);
+    }catch(e){ candidates = []; }
+
+    const usingRealTerrain = candidates.length > 0;
+    const count = 3 + Math.floor(Math.random()*3);
+    for(let i=0;i<count;i++){
+      let pos;
+      if(usingRealTerrain){
+        pos = candidates[Math.floor(Math.random()*candidates.length)];
+      } else {
+        const dist = 20 + Math.random()*180;
+        const ang = Math.random()*Math.PI*2;
+        const d = metersToDeg(dist, userPos.lat);
+        pos = { lat: userPos.lat + d.dLat*Math.sin(ang), lng: userPos.lng + d.dLng*Math.cos(ang) };
+      }
+      const theme = THEME_KEYS[Math.floor(Math.random()*THEME_KEYS.length)];
+      const namePool = MONSTER_NAMES[theme];
+      spawns.push({
+        id: "s"+i+"_"+Date.now()+"_"+i,
+        pos, theme,
+        name: namePool[Math.floor(Math.random()*namePool.length)],
+        maxHp: 60 + Math.floor(Math.random()*60)
+      });
+    }
+
+    // guaranteed close-range spawn for easy testing — always ~15m away regardless of terrain
+    {
+      const d = metersToDeg(15, userPos.lat);
+      const ang = Math.random()*Math.PI*2;
+      const theme = THEME_KEYS[Math.floor(Math.random()*THEME_KEYS.length)];
+      const namePool = MONSTER_NAMES[theme];
+      spawns.push({
+        id: "test_"+Date.now(),
+        pos: { lat: userPos.lat + d.dLat*Math.sin(ang), lng: userPos.lng + d.dLng*Math.cos(ang) },
+        theme,
+        name: namePool[Math.floor(Math.random()*namePool.length)],
+        maxHp: 60 + Math.floor(Math.random()*60),
+        isTest: true
+      });
+    }
+
+    mapStatus.textContent = usingRealTerrain
+      ? "Rifts are forming along nearby parks and footpaths."
+      : "No mapped parks or paths found nearby — spawning in the open. Map data coverage varies by area.";
+    renderMap();
+  }
+
+  let leafletMap = null;
+  let markerLayer = null;
+
+  function initMap(){
+    if(leafletMap) return;
+    leafletMap = L.map('leafletMap', { zoomControl:false }).setView([userPos.lat, userPos.lng], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(leafletMap);
+    youMarker = L.marker([userPos.lat, userPos.lng], {
+      icon: L.divIcon({ className:'', html:'<div class="you-dot"></div>', iconSize:[14,14] })
+    }).addTo(leafletMap);
+    markerLayer = L.layerGroup().addTo(leafletMap);
+  }
+
+  function updateYouMarker(){
+    if(youMarker && userPos) youMarker.setLatLng([userPos.lat, userPos.lng]);
+  }
+
+  const READY_RADIUS_M = 60; // generous on purpose — engage from the street, not the exact point
+
+  function renderMap(){
+    initMap();
+    markerLayer.clearLayers();
+    const list = document.getElementById("spawnList");
+    list.innerHTML = "";
+    if(!spawns.length){
+      document.getElementById("mapStatus").textContent = "No rifts nearby — check back soon.";
+    }
+
+    spawns.forEach(sp=>{
+      const t = THEMES[sp.theme];
+
+      const icon = L.divIcon({
+        className:'',
+        html:'<div class="spawn-pin" style="border-color:'+t.color+'">'+t.icon+'</div>',
+        iconSize:[32,32]
+      });
+      const marker = L.marker([sp.pos.lat, sp.pos.lng], { icon }).addTo(markerLayer);
+      marker.on('click', ()=> tryEngage(sp));
+      sp._marker = marker;
+
+      const card = document.createElement("div");
+      card.className = "spawn-card";
+      card.dataset.id = sp.id;
+      card.innerHTML = `
+        <div class="icon">${t.icon}</div>
+        <div class="info">
+          <div class="name">${sp.name}${sp.isTest? " (test)":""}</div>
+          <div class="dist" data-dist>— m away · ${t.name} essence</div>
+        </div>
+        <button data-engage>Engage</button>
+      `;
+      card.querySelector("[data-engage]").onclick = ()=> tryEngage(sp);
+      list.appendChild(card);
+    });
+
+    refreshSpawnDistances();
+  }
+
+  // Updates only the distance text / ready styling — never rebuilds elements,
+  // so it's safe to call frequently (e.g. on every GPS fix) without breaking
+  // an in-progress tap on the Engage button.
+  function refreshSpawnDistances(){
+    if(!userPos) return;
+    const list = document.getElementById("spawnList");
+    spawns.forEach(sp=>{
+      const dist = Math.round(haversine(userPos, sp.pos));
+      const card = list && list.querySelector('[data-id="'+sp.id+'"]');
+      if(card){
+        const t = THEMES[sp.theme];
+        const ready = dist <= READY_RADIUS_M;
+        card.querySelector("[data-dist]").textContent = dist+" m away · "+t.name+" essence";
+        const btn = card.querySelector("[data-engage]");
+        btn.textContent = ready ? "Engage" : "Get closer";
+        btn.classList.toggle("ready", ready);
+      }
+    });
+    updateFixIndicator();
+  }
+
+  function tryEngage(sp){
+    if(!userPos) return;
+    const dist = Math.round(haversine(userPos, sp.pos));
+    if(dist <= READY_RADIUS_M) beginEncounter(sp);
+    else alert("Too far to sense the rift clearly ("+dist+"m away) — get within "+READY_RADIUS_M+"m.");
+  }
+
+  // ---------- encounter / battle ----------
+  let battle = null;
+  let motionHandler = null;
+  let effortWindow = [];
+  let channelInterval = null;
+
+  // attacker/defender essence keys -> { mult, label }
+  function getEffectiveness(attackerKey, defenderKey){
+    if(!attackerKey) return { mult:1.0, label:"Even" };
+    if(state.confluences[attackerKey]) return { mult:1.3, label:"Fused mastery" };
+    const parts = String(attackerKey).split("#");
+    const themeKey = parts[0];
+    const t = THEMES[themeKey];
+    if(!t) return { mult:1.0, label:"Even" };
+    if(t.beats === defenderKey) return { mult:1.5, label:"Strong" };
+    if(t.weak === defenderKey) return { mult:0.65, label:"Weak" };
+    return { mult:1.0, label:"Even" };
+  }
+
+  function getUsableAbilities(){
+    const list=[];
+    THEME_KEYS.forEach(k=>{
+      getDiscoveredIndices(k).forEach(idx=>{
+        const a=THEMES[k].abilities[idx];
+        list.push({key:k+"#"+idx,themeKey:k,abilityIndex:idx,name:a.name,exercise:a.exercise,icon:THEMES[k].icon});
+      });
+    });
+    Object.keys(state.confluences||{}).forEach(comboKey=>{
+      const c=state.confluences[comboKey];
+      list.push({key:comboKey,name:c.name,exercise:c.exercise,icon:"✦",confluence:true});
+    });
+    return list;
+  }
+
+  function beginEncounter(sp){
+    battle = { sp, hp: sp.maxHp, maxHp: sp.maxHp, activeKey: null };
+    const t = THEMES[sp.theme];
+    document.getElementById("encGlyph").textContent = t.icon;
+    document.getElementById("encName").textContent = sp.name;
+    document.getElementById("encTag").textContent = t.name+" attunement · a fitness fantasy prototype";
+
+    const options = getUsableAbilities();
+    let defaultOpt = null;
+    if(options.length){
+      // prefer the option with the best effectiveness against this monster
+      defaultOpt = options.reduce((best,o)=>{
+        const eff = getEffectiveness(o.key, sp.theme);
+        const bestEff = best ? getEffectiveness(best.key, sp.theme) : null;
+        return (!best || eff.mult > bestEff.mult) ? o : best;
+      }, null);
+    }
+    battle.activeKey = defaultOpt ? defaultOpt.key : null;
+    renderAbilityPicker(options);
+    updateMoveDisplay();
+    updateHpBar();
+    switchTab("encounter");
+  }
+
+  function renderAbilityPicker(options){
+    const box = document.getElementById("abilityPicker");
+    if(!options.length){
+      box.innerHTML = "";
+      return;
+    }
+    box.innerHTML = "";
+    options.forEach(o=>{
+      const chip = document.createElement("div");
+      chip.className = "ability-chip"+(battle.activeKey===o.key? " active":"");
+      chip.textContent = o.icon+" "+o.name;
+      chip.onclick = ()=>{ battle.activeKey = o.key; renderAbilityPicker(options); updateMoveDisplay(); };
+      box.appendChild(chip);
+    });
+  }
+
+  function updateMoveDisplay(){
+    const sp = battle.sp;
+    let name, exercise;
+    if(battle.activeKey && battle.activeKey.includes("#")){
+      const [themeKey, idxText] = battle.activeKey.split("#");
+      const a = THEMES[themeKey].abilities[Number(idxText)];
+      name = a.name; exercise = a.exercise;
+    } else if(battle.activeKey && state.confluences[battle.activeKey]){
+      const c = state.confluences[battle.activeKey]; name = c.name; exercise = c.exercise;
+    } else {
+      name = "Instinct Strike";
+      exercise = "walk or jog on the spot for 30 seconds";
+    }
+    document.getElementById("moveName").textContent = name;
+    document.getElementById("moveHint").textContent = battle.activeKey
+      ? "Do "+exercise.toLowerCase()+" for 30 seconds. Movement is measured by your device."
+      : "Walk or jog on the spot for 30 seconds. The phone must detect real movement — standing still won't deal damage.";
+
+    const eff = getEffectiveness(battle.activeKey, sp.theme);
+    const badge = document.getElementById("typeBadge");
+    badge.textContent = eff.label + " · ×"+eff.mult.toFixed(2)+" damage";
+    badge.className = "type-badge ui-font " + (eff.mult>1?"strong":eff.mult<1?"weak":"even");
+  }
+
+  function updateHpBar(){
+    const pct = Math.max(0, battle.hp/battle.maxHp*100);
+    document.getElementById("hpbar").style.width = pct+"%";
+    document.getElementById("hpLabel").textContent = Math.max(0,Math.round(battle.hp))+" / "+battle.maxHp;
+  }
+
+  // ---------- movement / combat channel ----------
+  // Basic attacks require 30 seconds of walking/jogging on the spot.
+  // Device motion is measured from changes in acceleration, not the constant
+  // ~9.8 m/s² gravity signal, so simply holding the phone still won't count.
+  const BASIC_MOVE_SECONDS = 30;
+  const ESSENCE_MOVE_SECONDS = 30;
+  const MOTION_SAMPLE_MS = 100;
+  const DAMAGE_TICK_MS = 1000;
+  const MOTION_WINDOW_MS = 1000;
+  const MOVEMENT_THRESHOLD = 0.75;
+
+  let channelStartedAt = 0;
+  let lastMotionAt = 0;
+  let lastDamageAt = 0;
+  let lastMeditationAward = 0;
+  let movementTrackingEnabled = true;
+  let motionSamples = [];
+  let channelTimer = null;
+
+  function setChannelStatus(msg){
+    const el = document.getElementById("channelStatus");
+    if(el) el.textContent = msg || "";
+  }
+
+  function updateChargeIndicator(score, active){
+    const fill = document.getElementById("chargePowerFill");
+    const value = document.getElementById("chargePowerValue");
+    const status = document.getElementById("chargePowerStatus");
+    if(!fill || !value || !status) return;
+
+    if(!movementTrackingEnabled){
+      fill.style.width = "55%";
+      value.textContent = "—";
+      status.textContent = active ? "Movement tracking off — steady charge." : "Movement tracking is off.";
+      return;
+    }
+
+    const power = Math.max(0, Math.min(100, Math.round((score / (MOVEMENT_THRESHOLD * 3)) * 100)));
+    fill.style.width = power + "%";
+    value.textContent = power + "%";
+
+    if(!active){
+      status.textContent = "Start moving to build power.";
+      return;
+    }
+
+    if(power < 25){
+      status.textContent = "Very low — move more.";
+    }else if(score < MOVEMENT_THRESHOLD){
+      status.textContent = "Building power — not enough for damage yet.";
+    }else if(power < 60){
+      status.textContent = "Damage-ready — keep moving.";
+    }else if(power < 85){
+      status.textContent = "Strong attack charge.";
+    }else{
+      status.textContent = "Maximum attack power.";
+    }
+  }
+
+  function movementScore(){
+    if(motionSamples.length < 4) return 0;
+    const now = Date.now();
+    const recent = motionSamples.filter(s => now - s.t <= MOTION_WINDOW_MS);
+    if(recent.length < 4) return 0;
+
+    // Remove gravity by looking at changes between consecutive acceleration
+    // magnitudes. Walking/jogging produces repeated changes; standing still
+    // produces very little change.
+    let total = 0;
+    for(let i=1;i<recent.length;i++){
+      total += Math.abs(recent[i].m - recent[i-1].m);
+    }
+    return total / (recent.length - 1);
+  }
+
+  function startChannel(){
+    const btn = document.getElementById("btnChannel");
+    const toggle = document.getElementById("movementTrackingToggle");
+    movementTrackingEnabled = !toggle || toggle.checked;
+    const isBasic = !battle.activeKey;
+    const duration = isBasic ? BASIC_MOVE_SECONDS * 1000 : null;
+
+    if(!movementTrackingEnabled){
+      beginMotionChannel(isBasic, duration);
+      return;
+    }
+
+    if(typeof DeviceMotionEvent === "undefined"){
+      setChannelStatus("This device/browser does not provide a motion sensor.");
+      return;
+    }
+
+    // If iOS requires permission, request it here as well. This is a button
+    // gesture, which is the correct context for Safari's permission prompt.
+    if(typeof DeviceMotionEvent.requestPermission === "function"){
+      DeviceMotionEvent.requestPermission().then(result=>{
+        if(result === "granted") beginMotionChannel(isBasic, duration);
+        else setChannelStatus("Motion access is required to count movement.");
+      }).catch(()=>{
+        setChannelStatus("Motion access is required to count movement.");
+      });
+    } else {
+      beginMotionChannel(isBasic, duration);
+    }
+  }
+
+  function beginMotionChannel(isBasic, duration){
+    const btn = document.getElementById("btnChannel");
+    btn.textContent = isBasic ? "Moving… 30s" : "Channeling… 30s";
+    btn.disabled = true;
+    motionSamples = [];
+    channelStartedAt = Date.now();
+    lastMotionAt = 0;
+    lastDamageAt = 0;
+    updateChargeIndicator(0, true);
+
+    motionHandler = function(e){
+      if(!movementTrackingEnabled) return;
+      const a = e.acceleration || e.accelerationIncludingGravity;
+      if(!a) return;
+
+      const mag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2);
+      if(!Number.isFinite(mag)) return;
+
+      motionSamples.push({ t:Date.now(), m:mag });
+      const cutoff = Date.now() - MOTION_WINDOW_MS * 2;
+      motionSamples = motionSamples.filter(s => s.t >= cutoff);
+
+      const score = movementScore();
+      if(score >= MOVEMENT_THRESHOLD) lastMotionAt = Date.now();
+    };
+
+    window.addEventListener("devicemotion", motionHandler);
+
+    channelTimer = setInterval(()=>{
+      const score = movementScore();
+      const elapsed = Date.now() - channelStartedAt;
+      updateChargeIndicator(score, true);
+
+      if(isBasic){
+        const remaining = Math.max(0, Math.ceil((BASIC_MOVE_SECONDS*1000 - elapsed)/1000));
+        const pct = Math.min(100, Math.round(elapsed/(BASIC_MOVE_SECONDS*1000)*100));
+        document.getElementById("effortRing").style.setProperty("--pct", pct);
+        document.getElementById("effortPct").textContent = remaining + "s";
+        document.getElementById("effortLabel").textContent = !movementTrackingEnabled ? "tracking off" : (score >= MOVEMENT_THRESHOLD ? "moving" : "keep moving");
+      if(movementTrackingEnabled && score >= MOVEMENT_THRESHOLD){
+        const now=Date.now();
+        if(now-lastMeditationAward>=3000){
+          if(awardMeditationProgress(0.25)){ lastMeditationAward=now; renderInventory(); }
+        }
+      }
+        setChannelStatus(
+          !movementTrackingEnabled
+            ? "Movement tracking off — completing the timer gives a steady attack."
+            : (score >= MOVEMENT_THRESHOLD
+              ? "Movement detected — keep walking or jogging on the spot."
+              : "No movement detected — your 30 seconds won't count as damage yet.")
+        );
+
+        if(elapsed >= BASIC_MOVE_SECONDS*1000){
+          endChannel();
+          // Tracking-off mode uses a middle-strength attack; it does not
+          // require the phone to be attached to the player.
+          const movementRatio = !movementTrackingEnabled ? 0.75 : (lastMotionAt
+            ? Math.min(1, Math.max(0, (elapsed - (Date.now()-lastMotionAt))/elapsed + 0.55))
+            : 0);
+          if(movementRatio <= 0.05){
+            setChannelStatus("Attack failed — no movement was detected.");
+            document.getElementById("btnChannel").textContent = "Try again";
+            return;
+          }
+          const dmg = 10 + 16 * movementRatio;
+          battle.hp -= dmg;
+          updateHpBar();
+          if(battle.hp <= 0) onVictory();
+        }
+        return;
+      }
+
+      // Essence attacks now use the same 30-second movement window as the
+      // basic attack. Damage is applied once per second, not every sensor
+      // sample, so vigorous movement cannot instantly melt a monster.
+      const elapsedSec = elapsed / 1000;
+      const pct = Math.min(100, Math.round(elapsedSec / ESSENCE_MOVE_SECONDS * 100));
+      document.getElementById("effortRing").style.setProperty("--pct", pct);
+      document.getElementById("effortPct").textContent = Math.max(0, Math.ceil(ESSENCE_MOVE_SECONDS-elapsedSec))+"s";
+      document.getElementById("effortLabel").textContent = !movementTrackingEnabled ? "tracking off" : (score >= MOVEMENT_THRESHOLD ? "moving" : "keep moving");
+      setChannelStatus(
+        !movementTrackingEnabled
+          ? "Movement tracking off — steady attack power."
+          : (score >= MOVEMENT_THRESHOLD
+            ? "Movement detected — keep it going."
+            : "No movement detected — keep moving to deal damage.")
+      );
+
+      // Only deal damage on whole-second boundaries.
+      if(elapsed - lastDamageAt >= DAMAGE_TICK_MS){
+        lastDamageAt = elapsed;
+        const movementFactor = !movementTrackingEnabled ? 0.75 : Math.min(1, Math.max(0, score / 2.2));
+        const dmg = (1.0 + movementFactor * 1.0) *
+          getEffectiveness(battle.activeKey, battle.sp.theme).mult;
+        battle.hp -= dmg;
+        updateHpBar();
+      }
+
+      if(elapsed >= ESSENCE_MOVE_SECONDS*1000){
+        endChannel();
+
+        // A completed Essence ability use grants 10% mastery at Normal rank.
+        if(battle.activeKey && battle.activeKey.includes("#")){
+          const [themeKey, idxText] = battle.activeKey.split("#");
+          const mastery = awardAbilityProgress(themeKey, Number(idxText));
+          if(mastery.after>=100 && getMeditationTarget()===abilityProgressKey(themeKey,Number(idxText))) state.meditationTarget=null;
+          if(mastery.gained > 0){
+            setChannelStatus(`${THEMES[themeKey].abilities[Number(idxText)].name} mastery +${mastery.gained}% (${mastery.after}%).`);
+          } else {
+            setChannelStatus(`${THEMES[themeKey].abilities[Number(idxText)].name} is already at 100% mastery.`);
+          }
+          applyRankTheme();
+          renderInventory();
+        }
+
+        if(battle.hp <= 0){
+          onVictory();
+        } else {
+          setChannelStatus("Move complete — the rift endured. Start another move to continue.");
+        }
+      }
+    }, MOTION_SAMPLE_MS);
+  }
+
+  function endChannel(){
+    if(motionHandler) window.removeEventListener("devicemotion", motionHandler);
+    if(channelTimer) clearInterval(channelTimer);
+    motionHandler = null;
+    channelTimer = null;
+    motionSamples = [];
+    const btn = document.getElementById("btnChannel");
+    btn.textContent = battle && !battle.activeKey ? "Start 30-second move" : "Start move";
+    btn.disabled = false;
+    document.getElementById("effortRing").style.setProperty("--pct", 0);
+    document.getElementById("effortPct").textContent = "0%";
+    document.getElementById("effortLabel").textContent = "movement";
+    updateChargeIndicator(0, false);
+  }
+
+  function onVictory(){
+    const sp = battle.sp;
+    spawns = spawns.filter(s=>s.id !== sp.id);
+    const theme = sp.theme;
+    const rarity = rollRarity();
+
+    // Awakening Stones only begin appearing after the player has absorbed
+    // at least one Essence, so the reward can always have a meaningful use.
+    const essenceTotal = Object.values(state.essences || {}).reduce(
+      (total, rarities) => total + Object.values(rarities || {}).reduce((sum,n) => sum + Number(n || 0), 0),
+      0
+    );
+    const isStone = essenceTotal > 0 && Math.random() < 0.18;
+
+    if(isStone){
+      state.stones[theme] = (state.stones[theme]||0)+1;
+    } else {
+      state.essences[theme] = state.essences[theme]||{};
+      state.essences[theme][rarity.key] = (state.essences[theme][rarity.key]||0)+1;
+    }
+    save();
+    showReward(theme, rarity, isStone);
+  }
+
+  function rollRarity(){
+    const total = RARITIES.reduce((a,r)=>a+r.weight,0);
+    let roll = Math.random()*total;
+    for(const r of RARITIES){
+      if(roll < r.weight) return r;
+      roll -= r.weight;
+    }
+    return RARITIES[0];
+  }
+
+  function showAwakeningDiscovery(themeKey,abilityIndex,fromStone){
+    const t=THEMES[themeKey],a=t.abilities[abilityIndex];
+    document.getElementById("awGlyph").textContent=t.icon;
+    document.getElementById("awName").textContent=a.name;
+    document.getElementById("awExercise").textContent=a.exercise+" · 30 seconds";
+    document.getElementById("awDesc").textContent=fromStone?"The Awakening Stone has revealed a new "+t.name+" ability.":"Your first "+t.name+" ability has awakened.";
+    document.getElementById("awakeningModal").classList.remove("hide");
+  }
+  document.getElementById("awClose").onclick=()=>{
+    document.getElementById("awakeningModal").classList.add("hide");
+    renderInventory();
+  };
+
+  function showReward(themeKey, rarity, isStone){
+    const t = THEMES[themeKey];
+    const modal = document.getElementById("rewardModal");
+    document.getElementById("rwGlyph").textContent = isStone ? "◆" : t.icon;
+    const rEl = document.getElementById("rwRarity");
+    rEl.textContent = rarity.label + (isStone? " AWAKENING STONE":" ESSENCE");
+    rEl.style.color = rarity.color;
+    document.getElementById("rwName").textContent = isStone
+      ? t.name+" Awakening Stone"
+      : t.name+" Essence";
+    document.getElementById("rwDesc").textContent = isStone
+      ? "Added to your hoard — use it whenever you're ready to awaken "+t.ability+" at full strength."
+      : "Added to your hoard — absorb it whenever you're ready to unlock "+t.ability+" ("+t.exercise+").";
+    modal.classList.remove("hide");
+  }
+  document.getElementById("rwClose").onclick = ()=>{
+    document.getElementById("rewardModal").classList.add("hide");
+    if(document.getElementById("awakeningModal")) document.getElementById("awakeningModal").classList.add("hide");
+    renderInventory();
+    switchTab("map");
+    renderMap();
+  setupMovementToggle();
+  };
+
+  document.getElementById("btnChannel").onclick = startChannel;
+  document.getElementById("btnFlee").onclick = ()=>{
+    endChannel();
+    switchTab("map");
+  };
+
+  function setupMovementToggle(){
+    const toggle=document.getElementById("movementTrackingToggle");
+    const hint=document.getElementById("movementTrackingHint");
+    if(!toggle || toggle.dataset.bound) return;
+    toggle.dataset.bound="1";
+    toggle.addEventListener("change",()=>{
+      movementTrackingEnabled=toggle.checked;
+      if(hint) hint.textContent=movementTrackingEnabled
+        ? "Phone movement affects attack power"
+        : "Timer works without using the phone's motion sensor";
+      updateChargeIndicator(0, !!channelTimer);
+    });
+  }
+
+  // ---------- inventory ----------
+  let confluenceSelection = [];
+
+  function ownedEssenceTypes(){
+    return THEME_KEYS.filter(k=> state.essences[k] && Object.values(state.essences[k]).some(n=>n>0));
+  }
+
+  function consumeOneEssence(themeKey){
+    const rar = state.essences[themeKey];
+    if(!rar) return false;
+    const rk = RARITIES.map(r=>r.key).find(k=> (rar[k]||0) > 0);
+    if(!rk) return false;
+    rar[rk] -= 1;
+    if(rar[rk] <= 0) delete rar[rk];
+    return true;
+  }
+
+  function renderInventory(){
+    applyRankTheme();
+    let essenceTotal = 0, stoneTotal = 0, abilityTotal = 0;
+    Object.values(state.essences).forEach(rar=> Object.values(rar).forEach(n=> essenceTotal+=n));
+    Object.values(state.stones).forEach(n=> stoneTotal+=n);
+    THEME_KEYS.forEach(k=> abilityTotal += getDiscoveredIndices(k).length);
+
+    document.getElementById("tallyEssence").textContent = essenceTotal;
+    document.getElementById("tallyStones").textContent = stoneTotal;
+    document.getElementById("tallyAbilities").textContent = abilityTotal + Object.keys(state.confluences).length;
+
+    const abilityList=document.getElementById("abilityList");
+    abilityList.innerHTML="";
+    const ownedEssences = ownedEssenceTypes();
+    if(!ownedEssences.length){
+      abilityList.innerHTML = '<div class="status-line ui-font" style="text-align:left; margin:0;">No Essences absorbed yet.</div>';
+    }
+    ownedEssences.forEach(k=>{
+      const t=THEMES[k], discovered=getDiscoveredIndices(k);
+      const section=document.createElement("div");
+      section.className="essence-section";
+      const head=document.createElement("div");
+      head.className="essence-section-head";
+      head.innerHTML=`<div class="essence-icon">${t.icon}</div><div class="essence-info"><div class="essence-name">${t.name}</div><div class="essence-progress">${discovered.length} / 5 abilities discovered</div></div>`;
+      section.appendChild(head);
+      const track=document.createElement("div");
+      track.className="awakening-track";
+      t.abilities.forEach((a,idx)=>{
+        const known=discovered.includes(idx);
+        const next=!known && idx>0 && discovered.length<5;
+        const stage=document.createElement("div");
+        stage.className="awakening-stage "+(known?"unlocked current":next?"next":"");
+        const mastery = known ? getAbilityProgress(k, idx) : 0;
+        stage.innerHTML=`<div class="stage-icon ${known?"check":""}">${known?"✓":idx===0?"◈":next?"◆":"🔒"}</div><div class="stage-num">ABILITY ${idx+1}</div><div class="stage-name">${known?a.name:idx===0?"Awaiting Essence":"Unknown"}</div><div class="stage-exercise">${known?a.exercise:idx===0?"Absorb Essence":"Undiscovered"}</div>${known?`<div class="ability-level"><div style="width:${mastery}%"></div></div><div class="ability-level-text">${mastery}% mastery</div>`:""}${next?'<div class="stone-needed">Awakening Stone</div>':''}`;
+        if(known){
+          const meditationBox=document.createElement("div");
+          const meditating=getMeditationTarget()===abilityProgressKey(k,idx);
+          meditationBox.className="meditation-box"+(meditating?" active":"");
+          meditationBox.innerHTML=`<div class="meditation-row"><span>🧘 ${meditating?"Meditating":"Meditate on this ability"}</span></div><div class="meditation-note">${meditating?"Movement detected while travelling toward a rift adds a small amount of mastery.":"Select this ability to focus your meditation while travelling toward a rift."}</div>`;
+          const medButton=document.createElement("button");
+          medButton.type="button";
+          medButton.className="meditation-btn"+(meditating?" active":"");
+          medButton.textContent=meditating?"Stop":"Meditate";
+          medButton.addEventListener("click",()=>setMeditationTarget(k,idx));
+          meditationBox.querySelector(".meditation-row").appendChild(medButton);
+          stage.appendChild(meditationBox);
+        }
+        track.appendChild(stage);
+      });
+      section.appendChild(track);
+      abilityList.appendChild(section);
+    });
+
+    // formed confluences
+    const confList = document.getElementById("confluenceList");
+    confList.innerHTML = "";
+    const comboKeys = Object.keys(state.confluences);
+    if(!comboKeys.length){
+      confList.innerHTML = '<div class="status-line ui-font" style="text-align:left; margin:0;">None yet — absorb 3 distinct essences below to form your unique combination.</div>';
+    } else {
+      comboKeys.forEach(ck=>{
+        const c = state.confluences[ck];
+        const card = document.createElement("div");
+        card.className = "ability-card";
+        card.innerHTML = `
+          <div class="icon">✦</div>
+          <div>
+            <div class="name">${c.name}</div>
+            <div class="exercise">${c.exercise} · fused mastery, ×1.30 vs anything</div>
+          </div>`;
+        confList.appendChild(card);
+      });
+    }
+
+    // confluence builder
+    const builder = document.getElementById("confluenceBuilder");
+    const owned = ownedEssenceTypes();
+    confluenceSelection = confluenceSelection.filter(k=> owned.includes(k));
+    if(!owned.length){
+      builder.innerHTML = "";
+    } else {
+      builder.innerHTML = "";
+      const chipRow = document.createElement("div");
+      owned.forEach(k=>{
+        const t = THEMES[k];
+        const chip = document.createElement("div");
+        chip.className = "confluence-builder-chip" + (confluenceSelection.includes(k)? " selected":"");
+        chip.textContent = t.icon+" "+t.name;
+        chip.onclick = ()=>{
+          if(confluenceSelection.includes(k)){
+            confluenceSelection = confluenceSelection.filter(x=>x!==k);
+          } else if(confluenceSelection.length < 3){
+            confluenceSelection.push(k);
+          }
+          renderInventory();
+        };
+        chipRow.appendChild(chip);
+      });
+      builder.appendChild(chipRow);
+
+      const btn = document.createElement("button");
+      btn.className = "btn ui-font";
+      btn.style.marginTop = "6px";
+      const ready = confluenceSelection.length === 3;
+      btn.textContent = ready ? "Absorb & form confluence" : "Select "+(3-confluenceSelection.length)+" more essence"+(confluenceSelection.length===2?"":"s");
+      btn.disabled = !ready;
+      if(!ready) btn.classList.add("secondary");
+      btn.onclick = ()=>{
+        const keys = [...confluenceSelection].sort((a,b)=> THEME_KEYS.indexOf(a)-THEME_KEYS.indexOf(b));
+        const comboKey = "confluence:"+keys.join("_");
+        keys.forEach(k=> consumeOneEssence(k));
+        if(!state.confluences[comboKey]){
+          state.confluences[comboKey] = { parents:keys, name:makeConfluenceName(keys), exercise:makeConfluenceExercise(keys) };
+        }
+        confluenceSelection = [];
+        save();
+        renderInventory();
+      };
+      builder.appendChild(btn);
+    }
+
+    const grid = document.getElementById("essenceGrid");
+    grid.innerHTML = "";
+    THEME_KEYS.forEach(k=>{
+      const t = THEMES[k];
+      RARITIES.forEach(r=>{
+        const n = (state.essences[k] && state.essences[k][r.key]) || 0;
+        if(n === 0) return;
+        const row = document.createElement("div");
+        row.className = "hoard-row";
+        row.innerHTML = `
+          <div class="ic">${t.icon}</div>
+          <div class="info">
+            <div class="name">${t.name} essence</div>
+            <div class="sub" style="color:${r.color}">${r.label} × ${n}</div>
+          </div>
+          <button>Absorb</button>
+        `;
+        row.querySelector("button").onclick = ()=>{
+          state.essences[k][r.key] -= 1;
+          if(state.essences[k][r.key] <= 0) delete state.essences[k][r.key];
+          if(!state.abilities[k]) { state.abilities[k]=1; state.discoveries[k]=[0]; state.abilityProgress[abilityProgressKey(k,0)] = state.abilityProgress[abilityProgressKey(k,0)] || 0; showAwakeningDiscovery(k,0,false); }
+          save();
+          renderInventory();
+        };
+        grid.appendChild(row);
+      });
+    });
+    if(!grid.children.length){
+      grid.innerHTML = '<div class="status-line ui-font" style="text-align:left; margin:0;">No essences yet. Go close a rift.</div>';
+    }
+
+    const stoneGrid = document.getElementById("stoneGrid");
+    stoneGrid.innerHTML = "";
+    THEME_KEYS.forEach(k=>{
+      const n = state.stones[k] || 0;
+      if(n === 0) return;
+      const t = THEMES[k];
+      const current = Math.max(0, Number(state.abilities[k] || 0));
+      const fullyAwakened = current >= t.abilities.length;
+      const nextAbility = t.abilities[Math.min(current, t.abilities.length-1)];
+
+      const row = document.createElement("div");
+      row.className = "hoard-row";
+      row.innerHTML = `
+        <div class="ic">◆</div>
+        <div class="info">
+          <div class="name">${t.name} awakening stone</div>
+          <div class="sub">× ${n} · ${fullyAwakened ? "all five abilities awakened" : "next: "+nextAbility.name}</div>
+        </div>
+        <button ${fullyAwakened ? "disabled" : ""}>${fullyAwakened ? "Complete" : "Awaken"}</button>
+      `;
+      row.querySelector("button").onclick = ()=>{
+        if(fullyAwakened) return;
+        state.stones[k] -= 1;
+        if(state.stones[k] <= 0) delete state.stones[k];
+        const discoveredIdx = discoverAbility(k);
+        if(discoveredIdx !== null){
+          state.abilityProgress[abilityProgressKey(k,discoveredIdx)] = 0;
+          showAwakeningDiscovery(k, discoveredIdx, true);
+        }
+        save();
+        renderInventory();
+      };
+      stoneGrid.appendChild(row);
+    });
+    if(!stoneGrid.children.length){
+      stoneGrid.innerHTML = '<div class="status-line ui-font" style="text-align:left; margin:0;">No awakening stones yet. Absorb an Essence first.</div>';
+    }
+
+    // Future progression hook: an artifact can eventually allow a player to
+    // change/reconfigure an Essence. This is intentionally not functional yet.
+    const artifact = document.createElement("div");
+    artifact.className = "artifact-card";
+    artifact.innerHTML = `
+      <div class="artifact-title">🜂 Essence Reforging Artifact</div>
+      <div class="artifact-sub">
+        Future feature — a rare artifact that may allow an Essence to be changed
+        or reconfigured. It protects players from being permanently stuck with
+        an Essence combination they don't enjoy, while keeping Essence changes
+        meaningfully rare in the world.
+      </div>`;
+    stoneGrid.appendChild(artifact);
+  }
+
+  // ---------- testing ----------
+  document.getElementById("btnResetTest").onclick = ()=>{
+    const confirmed = confirm(
+      "Reset this Riftbound character?\\n\\n" +
+      "This clears essences, abilities, mastery, stones, confluences and rank progress on this device."
+    );
+    if(!confirmed) return;
+
+    try{ localStorage.removeItem("riftbound_save"); }catch(e){}
+    endChannel();
+    battle = null;
+    confluenceSelection = [];
+    state = {
+      essences:{},
+      stones:{},
+      abilities:{},
+      discoveries:{},
+      abilityProgress:{},
+      meditationTarget:null,
+      confluences:{},
+      level:1
+    };
+
+    document.getElementById("rewardModal").classList.add("hide");
+    if(document.getElementById("awakeningModal")) document.getElementById("awakeningModal").classList.add("hide");
+    document.getElementById("locError").classList.add("hide");
+    document.getElementById("permStatus").textContent = "Character reset. Ready to attune again.";
+    renderInventory();
+    applyRankTheme();
+  switchTab("home");
+  };
+
+  // ---------- tabs ----------
+  function switchTab(name){
+    ["home","map","encounter","inv"].forEach(n=>{
+      document.getElementById("screen-"+n)?.classList.toggle("hide", n!==name);
+    });
+    document.querySelectorAll(".tab-btn").forEach(b=> b.classList.toggle("active", b.dataset.tab===name));
+    document.getElementById("lockFab").classList.toggle("hide", name!=="encounter");
+    if(name==="inv") renderInventory();
+    if(name==="map" && leafletMap) setTimeout(()=> leafletMap.invalidateSize(), 50);
+  }
+  document.querySelectorAll(".tab-btn").forEach(b=>{
+    b.onclick = ()=>{
+      if(b.dataset.tab==="map" && !userPos){ requestAll(); return; }
+      switchTab(b.dataset.tab);
+      if(b.dataset.tab==="map") renderMap();
+    };
+  });
+
+  document.getElementById("btnBegin").onclick = requestAll;
+
+  // ---------- pocket lock overlay ----------
+  const overlay = document.getElementById("lockOverlay");
+  document.getElementById("lockFab").onclick = ()=> overlay.classList.remove("hide");
+
+  (function setupUnlockSlider(){
+    const track = document.getElementById("unlockTrack");
+    const thumb = document.getElementById("unlockThumb");
+    let startX=0, dragging=false, maxX=0;
+    function pos(e){ return (e.touches? e.touches[0].clientX : e.clientX); }
+    function down(e){ dragging=true; startX=pos(e); maxX = track.clientWidth - thumb.clientWidth - 6; }
+    function move(e){
+      if(!dragging) return;
+      let dx = pos(e)-startX;
+      dx = Math.max(0, Math.min(maxX, dx));
+      thumb.style.left = (3+dx)+"px";
+      if(dx >= maxX-2){ dragging=false; overlay.classList.add("hide"); thumb.style.left="3px"; }
+    }
+    function up(){ dragging=false; thumb.style.left="3px"; }
+    thumb.addEventListener("touchstart", down, {passive:true});
+    thumb.addEventListener("touchmove", move, {passive:true});
+    thumb.addEventListener("touchend", up);
+    thumb.addEventListener("mousedown", down);
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    // swallow all other touches while locked
+    overlay.addEventListener("touchmove", e=>{ if(e.target===overlay) e.preventDefault(); }, {passive:false});
+  })();
+
+  renderInventory();
+})();
+</script>
+</body>
+</html>
